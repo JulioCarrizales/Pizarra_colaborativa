@@ -136,3 +136,95 @@ button.tool.active {
     radial-gradient(circle, #d9d9de 1px, transparent 1px) 0 0 / 24px 24px;
   cursor: crosshair;
 }
+
+/* ======================= Vistas (auth / lobby) ======================= */
+.view { position: absolute; inset: 0; }
+.hidden { display: none !important; }
+.center { display: grid; place-items: center; padding: 20px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+  padding: 24px;
+}
+
+.brand { font-size: 26px; margin: 0 0 4px; }
+.brand-sm { font-weight: 700; }
+.muted { color: #8a8a90; font-size: 14px; margin: 0 0 18px; }
+.error { color: #e03131; font-size: 13px; min-height: 18px; margin: 6px 0 0; }
+
+/* --- Login / registro --- */
+#view-auth .card { width: 360px; max-width: 92vw; }
+
+.tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+.tab {
+  flex: 1; padding: 9px; border: 1px solid var(--border);
+  background: var(--bg); border-radius: 9px; cursor: pointer; font-size: 14px;
+}
+.tab.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+form { display: flex; flex-direction: column; gap: 12px; }
+label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #555; }
+
+input[type="text"], input[type="password"] {
+  padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 15px; outline: none; background: #fff;
+}
+input[type="text"]:focus, input[type="password"]:focus { border-color: var(--accent); }
+
+button.primary {
+  background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 11px 16px; font-size: 15px; cursor: pointer; font-weight: 600;
+}
+button.primary:hover { filter: brightness(1.06); }
+button.primary.small { padding: 7px 14px; font-size: 13px; }
+
+button.ghost {
+  background: transparent; border: 1px solid var(--border); border-radius: 9px;
+  padding: 7px 12px; cursor: pointer; font-size: 14px;
+}
+button.ghost:hover { background: var(--bg); }
+
+/* --- Lobby --- */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.spacer { flex: 1; }
+
+.lobby-body {
+  padding: 24px; max-width: 920px; margin: 0 auto;
+  display: grid; gap: 20px;
+}
+.lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.lobby-actions .card { min-width: 0; }   /* permitir que las columnas 1fr encojan */
+.lobby-actions .card h2,
+.boards h2 { margin: 0 0 14px; font-size: 17px; }
+.lobby-actions form { flex-direction: row; }
+.lobby-actions input { flex: 1; min-width: 0; }
+.lobby-actions button { flex: 0 0 auto; }
+.code-input { text-transform: uppercase; letter-spacing: 3px; font-weight: 600; }
+
+.board-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.board-list li {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 11px;
+}
+.b-info { flex: 1; display: flex; flex-direction: column; }
+.b-name { font-weight: 600; }
+.b-meta { font-size: 12px; color: #8a8a90; letter-spacing: 1px; }
+
+@media (max-width: 640px) {
+  .lobby-actions { grid-template-columns: 1fr; }
+}
+
+/* --- Chip de codigo para compartir (en la barra de la pizarra) --- */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 20px; padding: 5px 12px; font-size: 13px; font-weight: 600;
+  cursor: pointer; letter-spacing: 1px;
+}
+.chip:hover { filter: brightness(0.97); }

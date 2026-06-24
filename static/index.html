@@ -4,45 +4,114 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pizarra Colaborativa</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=4" />
 </head>
 <body>
-  <!-- Barra de herramientas -->
-  <header id="toolbar">
-    <div class="group" id="tools">
-      <button class="tool" data-tool="select" title="Seleccionar / mover">🖱️</button>
-      <button class="tool active" data-tool="pen" title="Lapiz">✏️</button>
-      <button class="tool" data-tool="rect" title="Rectangulo">▭</button>
-      <button class="tool" data-tool="ellipse" title="Elipse">◯</button>
-      <button class="tool" data-tool="line" title="Linea">╱</button>
-      <button class="tool" data-tool="arrow" title="Flecha">➜</button>
-      <button class="tool" data-tool="text" title="Texto">A</button>
-      <button class="tool" data-tool="eraser" title="Borrador">🧽</button>
+
+  <!-- ===================== VISTA: LOGIN / REGISTRO ===================== -->
+  <section id="view-auth" class="view center">
+    <div class="card">
+      <h1 class="brand">🎨 Pizarra Colaborativa</h1>
+      <p class="muted">Inicia sesión para crear y unirte a pizarras privadas.</p>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Iniciar sesión</button>
+        <button class="tab" data-tab="register">Crear cuenta</button>
+      </div>
+
+      <form id="auth-form" autocomplete="off">
+        <label>Usuario
+          <input id="auth-user" type="text" placeholder="tu_usuario" />
+        </label>
+        <label>Contraseña
+          <input id="auth-pass" type="password" placeholder="••••••" />
+        </label>
+        <p id="auth-error" class="error"></p>
+        <button id="auth-submit" type="submit" class="primary">Entrar</button>
+      </form>
     </div>
+  </section>
 
-    <div class="group" id="styles">
-      <label class="swatch-label" title="Color">
-        <input type="color" id="color" value="#1e1e1e" />
-      </label>
-      <div class="palette" id="palette"></div>
-      <label class="stroke" title="Grosor">
-        <input type="range" id="stroke" min="1" max="20" value="3" />
-      </label>
+  <!-- ===================== VISTA: LOBBY ===================== -->
+  <section id="view-lobby" class="view hidden">
+    <header class="topbar">
+      <span class="brand-sm">🎨 Pizarra Colaborativa</span>
+      <span class="spacer"></span>
+      <span id="lobby-user" class="badge"></span>
+      <button id="logout" class="ghost">Salir</button>
+    </header>
+
+    <div class="lobby-body">
+      <div class="lobby-actions">
+        <div class="card">
+          <h2>Crear pizarra privada</h2>
+          <form id="create-form">
+            <input id="create-name" type="text" placeholder="Nombre de la pizarra" />
+            <button type="submit" class="primary">Crear</button>
+          </form>
+        </div>
+        <div class="card">
+          <h2>Unirse con código</h2>
+          <form id="join-form">
+            <input id="join-code" type="text" placeholder="Ej: K7Q2ZP" maxlength="6" class="code-input" />
+            <button type="submit" class="primary">Unirse</button>
+          </form>
+          <p id="join-error" class="error"></p>
+        </div>
+      </div>
+
+      <div class="card boards">
+        <h2>Tus pizarras</h2>
+        <ul id="board-list" class="board-list"></ul>
+        <p id="no-boards" class="muted hidden">Aún no tienes pizarras. ¡Crea una!</p>
+      </div>
     </div>
+  </section>
 
-    <div class="group" id="actions">
-      <button id="clear" title="Limpiar pizarra">🗑️ Limpiar</button>
-    </div>
+  <!-- ===================== VISTA: PIZARRA ===================== -->
+  <section id="view-board" class="view hidden">
+    <header id="toolbar">
+      <div class="group">
+        <button id="back" class="ghost" title="Volver al lobby">←</button>
+      </div>
 
-    <div class="group" id="status">
-      <span id="presence" class="badge">● 0</span>
-      <span id="me" class="badge">Conectando…</span>
-    </div>
-  </header>
+      <div class="group" id="tools">
+        <button class="tool" data-tool="select" title="Seleccionar / mover">🖱️</button>
+        <button class="tool active" data-tool="pen" title="Lápiz">✏️</button>
+        <button class="tool" data-tool="rect" title="Rectángulo">▭</button>
+        <button class="tool" data-tool="ellipse" title="Elipse">◯</button>
+        <button class="tool" data-tool="line" title="Línea">╱</button>
+        <button class="tool" data-tool="arrow" title="Flecha">➜</button>
+        <button class="tool" data-tool="text" title="Texto">A</button>
+        <button class="tool" data-tool="eraser" title="Borrador">🧽</button>
+      </div>
 
-  <!-- Lienzo principal -->
-  <canvas id="board"></canvas>
+      <div class="group" id="styles">
+        <label class="swatch-label" title="Color">
+          <input type="color" id="color" value="#1e1e1e" />
+        </label>
+        <div class="palette" id="palette"></div>
+        <label class="stroke" title="Grosor">
+          <input type="range" id="stroke" min="1" max="20" value="3" />
+        </label>
+      </div>
 
-  <script src="app.js?v=2"></script>
+      <div class="group">
+        <button id="clear" title="Limpiar pizarra">🗑️ Limpiar</button>
+      </div>
+
+      <div class="group" id="status">
+        <button id="share" class="chip" title="Copiar código para invitar">
+          <span id="board-code">······</span> 📋
+        </button>
+        <span id="presence" class="badge">● 0</span>
+        <span id="me" class="badge">…</span>
+      </div>
+    </header>
+
+    <canvas id="board"></canvas>
+  </section>
+
+  <script src="app.js?v=3"></script>
 </body>
 </html>

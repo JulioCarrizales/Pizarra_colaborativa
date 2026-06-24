@@ -1,28 +1,189 @@
 /*
- * Pizarra Colaborativa - cliente (canvas + WebSocket)
+ * Pizarra Colaborativa - cliente (auth + lobby + canvas/WebSocket)
  * Proyecto Sistemas Operativos I (V Ciclo)
- *
- * Maneja el dibujo en un <canvas>, el estado local de la escena y la
- * sincronizacion en tiempo real con el servidor por WebSocket.
  */
 
-// ---------------------------------------------------------------------------
-// Estado
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Estado global
+// ===========================================================================
+let auth = null;            // { token, username }
+let currentBoard = null;    // { code, name }
+
+// ===========================================================================
+// Cliente de la API (HTTP / JSON)
+// ===========================================================================
+async function api(path, method = "GET", body = null) {
+  const headers = { "Content-Type": "application/json" };
+  if (auth) headers["Authorization"] = "Bearer " + auth.token;
+  const res = await fetch(path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : null,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "Error de servidor");
+  return data;
+}
+
+// ===========================================================================
+// Enrutado de vistas
+// ===========================================================================
+function show(view) {
+  for (const el of document.querySelectorAll(".view")) el.classList.add("hidden");
+  document.getElementById("view-" + view).classList.remove("hidden");
+}
+
+// ===========================================================================
+// Autenticacion
+// ===========================================================================
+let authMode = "login";
+
+document.querySelectorAll(".tab").forEach((t) => {
+  t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+    t.classList.add("active");
+    authMode = t.dataset.tab;
+    document.getElementById("auth-submit").textContent =
+      authMode === "login" ? "Entrar" : "Crear cuenta";
+    document.getElementById("auth-error").textContent = "";
+  });
+});
+
+document.getElementById("auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = document.getElementById("auth-user").value.trim();
+  const password = document.getElementById("auth-pass").value;
+  const err = document.getElementById("auth-error");
+  err.textContent = "";
+  try {
+    const path = authMode === "login" ? "/api/login" : "/api/register";
+    const data = await api(path, "POST", { username, password });
+    setAuth({ token: data.token, username: data.username });
+    goLobby();
+  } catch (ex) {
+    err.textContent = ex.message;
+  }
+});
+
+function setAuth(a) {
+  auth = a;
+  localStorage.setItem("pizarra_auth", JSON.stringify(a));
+}
+
+document.getElementById("logout").addEventListener("click", () => {
+  auth = null;
+  localStorage.removeItem("pizarra_auth");
+  show("auth");
+});
+
+// ===========================================================================
+// Lobby
+// ===========================================================================
+async function goLobby() {
+  leaveBoard();           // por si veniamos de una pizarra
+  show("lobby");
+  document.getElementById("lobby-user").textContent = "👤 " + auth.username;
+  await refreshBoards();
+}
+
+async function refreshBoards() {
+  const { boards } = await api("/api/boards");
+  const list = document.getElementById("board-list");
+  const empty = document.getElementById("no-boards");
+  list.innerHTML = "";
+  empty.classList.toggle("hidden", boards.length > 0);
+  for (const b of boards) {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <div class="b-info">
+        <span class="b-name">${escapeHtml(b.name)}</span>
+        <span class="b-meta">${b.code} · ${b.role === "owner" ? "dueño" : "miembro"}</span>
+      </div>
+      <button class="primary small">Abrir</button>`;
+    li.querySelector("button").addEventListener("click", () =>
+      enterBoard({ code: b.code, name: b.name })
+    );
+    list.appendChild(li);
+  }
+}
+
+document.getElementById("create-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = document.getElementById("create-name").value.trim();
+  const { board } = await api("/api/boards", "POST", { name });
+  document.getElementById("create-name").value = "";
+  enterBoard({ code: board.code, name: board.name });
+});
+
+document.getElementById("join-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const code = document.getElementById("join-code").value.trim().toUpperCase();
+  const err = document.getElementById("join-error");
+  err.textContent = "";
+  try {
+    const { board } = await api("/api/boards/join", "POST", { code });
+    document.getElementById("join-code").value = "";
+    enterBoard({ code: board.code, name: board.name });
+  } catch (ex) {
+    err.textContent = ex.message;
+  }
+});
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
+
+// ===========================================================================
+// PIZARRA  (canvas + WebSocket)  — todo el estado se reinicia por sala
+// ===========================================================================
 const canvas = document.getElementById("board");
 const ctx = canvas.getContext("2d");
 
-let elements = [];          // elementos confirmados (compartidos)
-const remoteDrafts = new Map(); // dibujos en vivo de otros usuarios (owner -> element)
-const cursors = new Map();      // cursores de otros usuarios (id -> {x,y,name,color})
+let elements = [];
+let remoteDrafts = new Map();
+let cursors = new Map();
+let me = null;
 
-let me = null;              // datos de mi usuario (id, color, name)
 let tool = "pen";
 let color = "#1e1e1e";
 let strokeWidth = 3;
+let drawing = false;
+let current = null;
 
-let drawing = false;        // estoy dibujando ahora mismo
-let current = null;         // elemento que estoy creando
+let socket = null;
+let wantConnection = false;   // true mientras estemos dentro de una pizarra
+
+function enterBoard(board) {
+  currentBoard = board;
+  // reiniciar estado del lienzo
+  elements = [];
+  remoteDrafts = new Map();
+  cursors = new Map();
+  me = null;
+  current = null;
+  drawing = false;
+
+  show("board");
+  document.getElementById("board-code").textContent = board.code;
+  document.getElementById("me").textContent = "Conectando…";
+  resizeCanvas();
+
+  wantConnection = true;
+  connect();
+}
+
+function leaveBoard() {
+  wantConnection = false;
+  if (socket) {
+    try { socket.close(); } catch (_) {}
+    socket = null;
+  }
+  currentBoard = null;
+}
+
+document.getElementById("back").addEventListener("click", goLobby);
 
 // ---------------------------------------------------------------------------
 // Lienzo: tamano y alta resolucion (retina)
@@ -34,29 +195,32 @@ function resizeCanvas() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   render();
 }
-window.addEventListener("resize", resizeCanvas);
+window.addEventListener("resize", () => { if (currentBoard) resizeCanvas(); });
 
 // ---------------------------------------------------------------------------
 // WebSocket
 // ---------------------------------------------------------------------------
 const WS_URL = `ws://${location.hostname}:8765`;
-let socket = null;
 
 function connect() {
   socket = new WebSocket(WS_URL);
 
   socket.addEventListener("open", () => {
-    setMe(me ? me.name : "Conectado");
+    // Autenticarse y unirse a la sala de esta pizarra.
+    socket.send(JSON.stringify({
+      type: "join",
+      token: auth.token,
+      code: currentBoard.code,
+    }));
   });
 
-  socket.addEventListener("message", (ev) => {
-    const msg = JSON.parse(ev.data);
-    handleServerMessage(msg);
-  });
+  socket.addEventListener("message", (ev) => handleServerMessage(JSON.parse(ev.data)));
 
   socket.addEventListener("close", () => {
-    setMe("Desconectado · reintentando…");
-    setTimeout(connect, 1500); // reconexion simple
+    if (wantConnection) {
+      document.getElementById("me").textContent = "Reconectando…";
+      setTimeout(() => { if (wantConnection) connect(); }, 1500);
+    }
   });
 }
 
@@ -68,12 +232,14 @@ function send(obj) {
 
 function handleServerMessage(msg) {
   switch (msg.type) {
+    case "error":
+      document.getElementById("me").textContent = "Error: " + msg.error;
+      return;
+
     case "init": {
       me = msg.you;
       const incoming = msg.elements || [];
       const incomingIds = new Set(incoming.map((e) => e.id));
-      // Conservar lo que dibuje localmente y el servidor aun no tiene
-      // (p.ej. trazos hechos durante una desconexion) y re-sincronizarlo.
       const localOnly = elements.filter((e) => !incomingIds.has(e.id));
       elements = incoming.slice();
       for (const el of localOnly) {
@@ -81,7 +247,7 @@ function handleServerMessage(msg) {
         send({ type: "add", element: el });
       }
       (msg.drafts || []).forEach((el) => remoteDrafts.set(el.owner, el));
-      setMe(`${me.name}`);
+      setMe(me.name);
       setPresence(msg.users);
       paintMe();
       render();
@@ -89,10 +255,7 @@ function handleServerMessage(msg) {
     }
 
     case "add":
-      // Deduplicar: si ya lo tengo (mi propio eco o un reenvio), no lo agrego.
-      if (!elements.some((e) => e.id === msg.element.id)) {
-        elements.push(msg.element);
-      }
+      if (!elements.some((e) => e.id === msg.element.id)) elements.push(msg.element);
       remoteDrafts.delete(msg.element.owner);
       render();
       break;
@@ -196,14 +359,9 @@ function drawArrow(x1, y1, x2, y2, w) {
 
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // 1) escena confirmada
   for (const el of elements) drawElement(el);
-  // 2) mi elemento en progreso
   if (current) drawElement(current);
-  // 3) dibujos en vivo de otros
   for (const el of remoteDrafts.values()) drawElement(el);
-  // 4) cursores ajenos
   for (const c of cursors.values()) drawCursor(c);
 }
 
@@ -231,7 +389,7 @@ canvas.addEventListener("mousedown", (ev) => {
   if (tool === "eraser") {
     const hit = hitTest(p.x, p.y);
     if (hit) {
-      elements = elements.filter((e) => e.id !== hit.id); // local primero
+      elements = elements.filter((e) => e.id !== hit.id);
       render();
       send({ type: "delete", id: hit.id });
     }
@@ -243,14 +401,14 @@ canvas.addEventListener("mousedown", (ev) => {
     if (text) {
       const el = base("text");
       el.x = p.x; el.y = p.y; el.text = text;
-      elements.push(el); // local primero
+      elements.push(el);
       render();
       send({ type: "add", element: el });
     }
     return;
   }
 
-  if (tool === "select") return; // (seleccion/mover queda como mejora futura)
+  if (tool === "select") return;
 
   drawing = true;
   current = base(tool);
@@ -265,10 +423,7 @@ canvas.addEventListener("mousedown", (ev) => {
 
 canvas.addEventListener("mousemove", (ev) => {
   const p = pos(ev);
-
-  // Compartir la posicion del cursor (con throttling sencillo).
   throttleCursor(p);
-
   if (!drawing || !current) return;
 
   if (current.type === "pen") {
@@ -279,7 +434,6 @@ canvas.addEventListener("mousemove", (ev) => {
     current.w = p.x - current.x;
     current.h = p.y - current.y;
   }
-
   send({ type: "draft", element: current });
   render();
 });
@@ -287,22 +441,13 @@ canvas.addEventListener("mousemove", (ev) => {
 window.addEventListener("mouseup", () => {
   if (!drawing || !current) return;
   drawing = false;
-
-  // Ignorar clics sin movimiento (elemento vacio).
-  if (!isMeaningful(current)) {
-    current = null;
-    render();
-    return;
-  }
-
-  // Confirmar de inmediato en mi propia pizarra (optimista) y avisar al servidor.
+  if (!isMeaningful(current)) { current = null; render(); return; }
   elements.push(current);
   send({ type: "add", element: current });
   current = null;
   render();
 });
 
-// Id unico por cliente (no depende de crypto: sirve tambien sobre http simple).
 let _elementSeq = 0;
 function newId() {
   return `${me ? me.id : "x"}-${Date.now().toString(36)}-${(_elementSeq++).toString(36)}`;
@@ -319,7 +464,6 @@ function isMeaningful(el) {
   return Math.abs(el.w) > 2 || Math.abs(el.h) > 2;
 }
 
-// Deteccion simple de "click sobre un elemento" para el borrador.
 function hitTest(x, y) {
   const tol = 8;
   for (let i = elements.length - 1; i >= 0; i--) {
@@ -347,9 +491,6 @@ function distToSegment(px, py, x1, y1, x2, y2) {
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
 }
 
-// ---------------------------------------------------------------------------
-// Envio de cursor con throttling (~30 fps)
-// ---------------------------------------------------------------------------
 let lastCursorSent = 0;
 function throttleCursor(p) {
   const now = performance.now();
@@ -360,7 +501,7 @@ function throttleCursor(p) {
 }
 
 // ---------------------------------------------------------------------------
-// Barra de herramientas (UI)
+// Barra de herramientas
 // ---------------------------------------------------------------------------
 document.querySelectorAll(".tool").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -372,12 +513,8 @@ document.querySelectorAll(".tool").forEach((btn) => {
 });
 
 const colorInput = document.getElementById("color");
-colorInput.addEventListener("input", (e) => {
-  color = e.target.value;
-  syncPaletteActive();
-});
+colorInput.addEventListener("input", (e) => { color = e.target.value; syncPaletteActive(); });
 
-// Paleta rapida de colores.
 const PALETTE = ["#1e1e1e", "#e03131", "#1971c2", "#2f9e44", "#f08c00", "#9c36b5"];
 const paletteEl = document.getElementById("palette");
 PALETTE.forEach((c) => {
@@ -386,16 +523,13 @@ PALETTE.forEach((c) => {
   dot.style.background = c;
   dot.dataset.color = c;
   dot.addEventListener("click", () => {
-    color = c;
-    colorInput.value = c;
-    syncPaletteActive();
+    color = c; colorInput.value = c; syncPaletteActive();
   });
   paletteEl.appendChild(dot);
 });
 function syncPaletteActive() {
-  document.querySelectorAll(".palette .dot").forEach((d) => {
-    d.classList.toggle("active", d.dataset.color === color);
-  });
+  document.querySelectorAll(".palette .dot").forEach((d) =>
+    d.classList.toggle("active", d.dataset.color === color));
 }
 syncPaletteActive();
 
@@ -405,7 +539,7 @@ document.getElementById("stroke").addEventListener("input", (e) => {
 
 document.getElementById("clear").addEventListener("click", () => {
   if (confirm("¿Limpiar la pizarra para todos?")) {
-    elements = [];          // limpiar local primero
+    elements = [];
     remoteDrafts.clear();
     current = null;
     render();
@@ -413,21 +547,38 @@ document.getElementById("clear").addEventListener("click", () => {
   }
 });
 
+// Compartir codigo de la pizarra (copiar al portapapeles).
+document.getElementById("share").addEventListener("click", async () => {
+  if (!currentBoard) return;
+  try {
+    await navigator.clipboard.writeText(currentBoard.code);
+    const el = document.getElementById("board-code");
+    const original = el.textContent;
+    el.textContent = "¡Copiado!";
+    setTimeout(() => { el.textContent = original; }, 1200);
+  } catch (_) {
+    alert("Código de la pizarra: " + currentBoard.code);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Indicadores de estado
 // ---------------------------------------------------------------------------
-function setPresence(n) {
-  document.getElementById("presence").textContent = `● ${n}`;
-}
-function setMe(text) {
-  document.getElementById("me").textContent = text;
-}
-function paintMe() {
-  if (me) document.getElementById("me").style.color = me.color;
-}
+function setPresence(n) { document.getElementById("presence").textContent = `● ${n}`; }
+function setMe(text) { document.getElementById("me").textContent = text; }
+function paintMe() { if (me) document.getElementById("me").style.color = me.color; }
 
-// ---------------------------------------------------------------------------
-// Arranque
-// ---------------------------------------------------------------------------
-resizeCanvas();
-connect();
+// ===========================================================================
+// Arranque: si hay sesion guardada, ir al lobby; si no, a login.
+// ===========================================================================
+(function boot() {
+  const saved = localStorage.getItem("pizarra_auth");
+  if (saved) {
+    try {
+      auth = JSON.parse(saved);
+      goLobby().catch(() => { auth = null; show("auth"); });
+      return;
+    } catch (_) {}
+  }
+  show("auth");
+})();

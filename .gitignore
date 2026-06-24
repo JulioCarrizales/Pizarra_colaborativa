@@ -5,6 +5,10 @@ __pycache__/
 venv/
 env/
 
+# Base de datos local (usuarios y pizarras)
+*.db
+*.sqlite3
+
 # Editor / SO
 .vscode/
 .idea/
