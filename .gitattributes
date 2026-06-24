@@ -1,0 +1,5 @@
+# Los scripts de shell y el Containerfile deben usar finales de linea LF
+# para que funcionen en Linux/EC2 aunque se editen en Windows.
+*.sh        text eol=lf
+Containerfile text eol=lf
+deploy.sh   text eol=lf

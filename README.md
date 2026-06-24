@@ -8,9 +8,14 @@ Aplicación web donde varias personas dibujan en un mismo lienzo en tiempo real.
 Cada cambio (trazo, forma, texto) se reenvía por WebSocket a todos los clientes
 conectados, y el servidor mantiene en memoria el estado compartido de la pizarra.
 
-> Este avance contiene **solo la aplicación funcional**. La instrumentación de SO
-> (simulador de N clientes, medición de descriptores de archivo, conexiones y
-> memoria por conexión) y el despliegue con Podman se agregan en las siguientes fases.
+Incluye **cuentas de usuario** y **pizarras privadas con código** para compartir.
+
+**Despliegue con Podman** (rootless, como pod + volumen + red): ver
+[docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
+
+> Pendiente de las siguientes fases: la instrumentación de SO (simulador de N
+> clientes, medición de descriptores de archivo, conexiones y memoria por conexión),
+> el despliegue en AWS EC2 y el dominio con HTTPS.
 
 ## Características
 

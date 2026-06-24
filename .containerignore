@@ -1,0 +1,12 @@
+# Lo que NO debe entrar a la imagen.
+.git
+.gitignore
+.gitattributes
+__pycache__
+*.pyc
+*.db
+*.sqlite3
+*.md
+docs
+deploy.sh
+.claude

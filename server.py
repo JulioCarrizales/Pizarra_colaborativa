@@ -38,11 +38,15 @@ import websockets
 # Configuracion
 # ----------------------------------------------------------------------------
 HOST = "0.0.0.0"
-HTTP_PORT = 8000          # frontend + API (http://localhost:8000)
-WS_PORT = 8765            # canal de colaboracion (ws://localhost:8765)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_PATH = os.path.join(BASE_DIR, "pizarra.db")
+
+# Configurable por entorno (util en el contenedor Podman). Valores por defecto
+# para correr local sin variables. En el contenedor, PIZARRA_DB apunta al volumen
+# montado (p.ej. /data/pizarra.db) para que los datos persistan.
+HTTP_PORT = int(os.environ.get("PIZARRA_HTTP_PORT", "8000"))   # frontend + API
+WS_PORT = int(os.environ.get("PIZARRA_WS_PORT", "8765"))       # colaboracion
+DB_PATH = os.environ.get("PIZARRA_DB", os.path.join(BASE_DIR, "pizarra.db"))
 
 # Paleta para identificar a cada usuario dentro de una sala (cursor y nombre).
 USER_COLORS = [
@@ -70,6 +74,8 @@ def db():
 
 
 def init_db():
+    # Crear el directorio de la base si no existe (p.ej. el volumen /data).
+    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
     with db() as conn:
         conn.executescript(
             """
