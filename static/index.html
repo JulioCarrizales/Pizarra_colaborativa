@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pizarra Colaborativa</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Barra de herramientas -->
+  <header id="toolbar">
+    <div class="group" id="tools">
+      <button class="tool" data-tool="select" title="Seleccionar / mover">🖱️</button>
+      <button class="tool active" data-tool="pen" title="Lapiz">✏️</button>
+      <button class="tool" data-tool="rect" title="Rectangulo">▭</button>
+      <button class="tool" data-tool="ellipse" title="Elipse">◯</button>
+      <button class="tool" data-tool="line" title="Linea">╱</button>
+      <button class="tool" data-tool="arrow" title="Flecha">➜</button>
+      <button class="tool" data-tool="text" title="Texto">A</button>
+      <button class="tool" data-tool="eraser" title="Borrador">🧽</button>
+    </div>
+
+    <div class="group" id="styles">
+      <label class="swatch-label" title="Color">
+        <input type="color" id="color" value="#1e1e1e" />
+      </label>
+      <div class="palette" id="palette"></div>
+      <label class="stroke" title="Grosor">
+        <input type="range" id="stroke" min="1" max="20" value="3" />
+      </label>
+    </div>
+
+    <div class="group" id="actions">
+      <button id="clear" title="Limpiar pizarra">🗑️ Limpiar</button>
+    </div>
+
+    <div class="group" id="status">
+      <span id="presence" class="badge">● 0</span>
+      <span id="me" class="badge">Conectando…</span>
+    </div>
+  </header>
+
+  <!-- Lienzo principal -->
+  <canvas id="board"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>
