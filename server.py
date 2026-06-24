@@ -132,10 +132,16 @@ async def on_message(websocket, user, msg):
         # El usuario solto el mouse: el elemento queda confirmado en la escena.
         element = msg.get("element")
         if element is not None:
-            element["id"] = next(_id_counter)
+            # El cliente genera su propio id (optimista). Si faltara, lo asignamos.
+            if "id" not in element:
+                element["id"] = next(_id_counter)
             element["owner"] = user["id"]
-            scene.append(element)
             drafts.pop(user["id"], None)
+            # Idempotente: ignorar reenvios de algo que ya esta en la escena
+            # (p.ej. tras una reconexion del cliente).
+            if any(e.get("id") == element["id"] for e in scene):
+                return
+            scene.append(element)
             await broadcast({"type": "add", "element": element})
 
     elif mtype == "delete":
@@ -168,6 +174,12 @@ async def on_message(websocket, user, msg):
 class StaticHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
+
+    def end_headers(self):
+        # Evitar que el navegador sirva una version cacheada del frontend
+        # (util al iterar en el codigo: siempre se carga lo ultimo).
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        super().end_headers()
 
     def log_message(self, *args):
         pass  # silenciamos el log por peticion para no ensuciar la consola

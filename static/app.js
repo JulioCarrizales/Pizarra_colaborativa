@@ -68,18 +68,31 @@ function send(obj) {
 
 function handleServerMessage(msg) {
   switch (msg.type) {
-    case "init":
+    case "init": {
       me = msg.you;
-      elements = msg.elements || [];
+      const incoming = msg.elements || [];
+      const incomingIds = new Set(incoming.map((e) => e.id));
+      // Conservar lo que dibuje localmente y el servidor aun no tiene
+      // (p.ej. trazos hechos durante una desconexion) y re-sincronizarlo.
+      const localOnly = elements.filter((e) => !incomingIds.has(e.id));
+      elements = incoming.slice();
+      for (const el of localOnly) {
+        elements.push(el);
+        send({ type: "add", element: el });
+      }
       (msg.drafts || []).forEach((el) => remoteDrafts.set(el.owner, el));
       setMe(`${me.name}`);
       setPresence(msg.users);
       paintMe();
       render();
       break;
+    }
 
     case "add":
-      elements.push(msg.element);
+      // Deduplicar: si ya lo tengo (mi propio eco o un reenvio), no lo agrego.
+      if (!elements.some((e) => e.id === msg.element.id)) {
+        elements.push(msg.element);
+      }
       remoteDrafts.delete(msg.element.owner);
       render();
       break;
@@ -217,7 +230,11 @@ canvas.addEventListener("mousedown", (ev) => {
 
   if (tool === "eraser") {
     const hit = hitTest(p.x, p.y);
-    if (hit) send({ type: "delete", id: hit.id });
+    if (hit) {
+      elements = elements.filter((e) => e.id !== hit.id); // local primero
+      render();
+      send({ type: "delete", id: hit.id });
+    }
     return;
   }
 
@@ -226,6 +243,8 @@ canvas.addEventListener("mousedown", (ev) => {
     if (text) {
       const el = base("text");
       el.x = p.x; el.y = p.y; el.text = text;
+      elements.push(el); // local primero
+      render();
       send({ type: "add", element: el });
     }
     return;
@@ -276,12 +295,21 @@ window.addEventListener("mouseup", () => {
     return;
   }
 
+  // Confirmar de inmediato en mi propia pizarra (optimista) y avisar al servidor.
+  elements.push(current);
   send({ type: "add", element: current });
   current = null;
+  render();
 });
 
+// Id unico por cliente (no depende de crypto: sirve tambien sobre http simple).
+let _elementSeq = 0;
+function newId() {
+  return `${me ? me.id : "x"}-${Date.now().toString(36)}-${(_elementSeq++).toString(36)}`;
+}
+
 function base(type) {
-  return { type, color, strokeWidth };
+  return { id: newId(), type, color, strokeWidth, owner: me ? me.id : null };
 }
 
 function isMeaningful(el) {
@@ -376,7 +404,13 @@ document.getElementById("stroke").addEventListener("input", (e) => {
 });
 
 document.getElementById("clear").addEventListener("click", () => {
-  if (confirm("¿Limpiar la pizarra para todos?")) send({ type: "clear" });
+  if (confirm("¿Limpiar la pizarra para todos?")) {
+    elements = [];          // limpiar local primero
+    remoteDrafts.clear();
+    current = null;
+    render();
+    send({ type: "clear" });
+  }
 });
 
 // ---------------------------------------------------------------------------
