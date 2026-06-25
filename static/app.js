@@ -200,10 +200,16 @@ window.addEventListener("resize", () => { if (currentBoard) resizeCanvas(); });
 // ---------------------------------------------------------------------------
 // WebSocket
 // ---------------------------------------------------------------------------
-const WS_URL = `ws://${location.hostname}:8765`;
+function wsUrl() {
+  // En produccion (HTTPS) el WebSocket pasa por el proxy en el mismo dominio:
+  // wss://dominio/ws  (Caddy lo reenvia al servidor de colaboracion en 8765).
+  // En local (HTTP) se conecta directo al puerto 8765.
+  if (location.protocol === "https:") return `wss://${location.host}/ws`;
+  return `ws://${location.hostname}:8765`;
+}
 
 function connect() {
-  socket = new WebSocket(WS_URL);
+  socket = new WebSocket(wsUrl());
 
   socket.addEventListener("open", () => {
     // Autenticarse y unirse a la sala de esta pizarra.

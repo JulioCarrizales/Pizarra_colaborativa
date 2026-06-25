@@ -1,0 +1,18 @@
+# Caddyfile - Proxy inverso con HTTPS automatico (Let's Encrypt).
+# El dominio se toma de la variable de entorno DOMAIN (la pasa deploy-prod.sh).
+#
+# Caddy obtiene y renueva el certificado solo. Requiere que el dominio apunte
+# (registro DNS tipo A) a la IP publica del servidor y que el puerto 80 sea
+# accesible desde Internet (para el reto ACME).
+
+{$DOMAIN} {
+	# El canal WebSocket llega como wss://dominio/ws -> servidor de colaboracion (8765)
+	handle /ws* {
+		reverse_proxy localhost:8765
+	}
+
+	# Todo lo demas (frontend + API) -> servidor HTTP de la app (8000)
+	handle {
+		reverse_proxy localhost:8000
+	}
+}

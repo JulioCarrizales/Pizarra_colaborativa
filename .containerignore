@@ -9,4 +9,6 @@ __pycache__
 *.md
 docs
 deploy.sh
+deploy-prod.sh
+Caddyfile
 .claude
