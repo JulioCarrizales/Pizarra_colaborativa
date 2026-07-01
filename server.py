@@ -100,6 +100,11 @@ def init_db():
                 joined_at TEXT NOT NULL,
                 PRIMARY KEY (user_id, board_id)
             );
+            CREATE TABLE IF NOT EXISTS board_scenes (
+                code       TEXT PRIMARY KEY,
+                scene_json TEXT NOT NULL DEFAULT '[]',
+                updated_at TEXT NOT NULL
+            );
             """
         )
 
@@ -219,8 +224,38 @@ _conn_counter = itertools.count(1)
 _id_counter = itertools.count(1)
 
 
+def load_scene(code):
+    """Carga la escena (dibujos) de una pizarra desde la base."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT scene_json FROM board_scenes WHERE code = ?", (code,)
+        ).fetchone()
+    if not row:
+        return []
+    try:
+        return json.loads(row["scene_json"])
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def save_scene(code, scene):
+    """Guarda la escena de una pizarra en la base (persiste los dibujos)."""
+    with _db_lock, db() as conn:
+        conn.execute(
+            "INSERT INTO board_scenes(code, scene_json, updated_at) VALUES (?,?,?) "
+            "ON CONFLICT(code) DO UPDATE SET "
+            "scene_json = excluded.scene_json, updated_at = excluded.updated_at",
+            (code, json.dumps(scene), now_iso()),
+        )
+
+
 def get_room(code):
-    return rooms.setdefault(code, {"scene": [], "drafts": {}, "clients": {}})
+    """Devuelve la sala en memoria; si no existe, la crea cargando su escena de la BD."""
+    room = rooms.get(code)
+    if room is None:
+        room = {"code": code, "scene": load_scene(code), "drafts": {}, "clients": {}}
+        rooms[code] = room
+    return room
 
 
 async def broadcast(room, message, exclude=None):
@@ -303,15 +338,9 @@ async def handler(websocket):
             await broadcast(room, presence_message(room))
             print(f"[-] {info['name']} salio. En sala: {len(room['clients'])}")
             if not room["clients"]:
-                # Sala vacia: liberar memoria (la pizarra sigue en la BD).
-                rooms.pop(_code_of(room), None)
-
-
-def _code_of(target_room):
-    for code, room in rooms.items():
-        if room is target_room:
-            return code
-    return None
+                # Sala vacia: liberar memoria. Los dibujos ya estan guardados en la
+                # BD, asi que al reabrir la pizarra se recargan.
+                rooms.pop(room["code"], None)
 
 
 async def on_message(room, websocket, info, msg):
@@ -335,6 +364,7 @@ async def on_message(room, websocket, info, msg):
             if any(e.get("id") == element["id"] for e in room["scene"]):
                 return  # idempotente (reenvio tras reconexion)
             room["scene"].append(element)
+            save_scene(room["code"], room["scene"])   # persistir el dibujo
             await broadcast(room, {"type": "add", "element": element})
 
     elif mtype == "delete":
@@ -342,11 +372,13 @@ async def on_message(room, websocket, info, msg):
         before = len(room["scene"])
         room["scene"][:] = [el for el in room["scene"] if el.get("id") != eid]
         if len(room["scene"]) != before:
+            save_scene(room["code"], room["scene"])
             await broadcast(room, {"type": "delete", "id": eid})
 
     elif mtype == "clear":
         room["scene"].clear()
         room["drafts"].clear()
+        save_scene(room["code"], room["scene"])
         await broadcast(room, {"type": "clear"})
 
     elif mtype == "cursor":
