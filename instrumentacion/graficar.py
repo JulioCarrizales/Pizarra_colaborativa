@@ -84,10 +84,34 @@ def graficar(args):
     print("  grafica_descriptores.png")
     print("  grafica_por_conexion.png")
 
+    # 4) (Opcional) Comparacion sin limite vs con limite: conexiones establecidas.
+    if args.comparar:
+        filas_lim = leer(args.comparar)
+        objetivo = _col(filas, "clientes", int)
+        conex_a = _col(filas, "conexiones")
+        conex_b = _col(filas_lim, "conexiones")
+        lim_b = next((v for v in _col(filas_lim, "limite_fd") if v is not None), None)
+        plt.figure(figsize=(7, 4.2))
+        plt.plot(objetivo, objetivo, color="#adb5bd", linestyle=":", label="Ideal (1:1)")
+        plt.plot(objetivo, conex_a, marker="o", color="#2f9e44", label="Sin limite (ulimit 1024)")
+        plt.plot(objetivo, conex_b, marker="s", color="#e03131",
+                 label=f"Con limite (ulimit {int(lim_b) if lim_b else '?'})")
+        plt.title("Conexiones establecidas segun el limite de descriptores")
+        plt.xlabel("Clientes solicitados")
+        plt.ylabel("Conexiones establecidas (medidas en el servidor)")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig("grafica_comparacion.png", dpi=130)
+        plt.close()
+        print("  grafica_comparacion.png")
+
 
 def _parse():
     p = argparse.ArgumentParser(description="Genera graficas del experimento.")
     p.add_argument("--datos", default="resultados.csv")
+    p.add_argument("--comparar", default=None,
+                   help="CSV del escenario con limite, para la grafica comparativa")
     return p.parse_args()
 
 
