@@ -9,6 +9,10 @@ env/
 *.db
 *.sqlite3
 
+# Resultados generados por la instrumentacion
+instrumentacion/*.csv
+instrumentacion/*.png
+
 # Editor / SO
 .vscode/
 .idea/
