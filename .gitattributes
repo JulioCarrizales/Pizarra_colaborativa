@@ -5,3 +5,4 @@ Containerfile text eol=lf
 Caddyfile     text eol=lf
 deploy.sh     text eol=lf
 deploy-prod.sh text eol=lf
+correr_experimento.sh text eol=lf
